@@ -632,6 +632,10 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
             return resourceURL
         }
 
+        if let resourceURL = Bundle.main.url(forResource: "default", withExtension: "wav") {
+            return resourceURL
+        }
+
         let workingDirectoryURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent(relativePath)
         if FileManager.default.fileExists(atPath: workingDirectoryURL.path) {
