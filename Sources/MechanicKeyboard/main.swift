@@ -2,6 +2,9 @@ import AppKit
 import AVFoundation
 import ApplicationServices
 import UniformTypeIdentifiers
+#if canImport(MechanicKeyboardCore)
+import MechanicKeyboardCore
+#endif
 
 private let keyboardEventCallback: CGEventTapCallBack = { _, type, event, userInfo in
     if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
@@ -364,6 +367,29 @@ private final class VolumeControlView: NSView {
     }
 }
 
+private final class RenderClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var renderedAt = 0.0
+
+    var uptime: TimeInterval {
+        lock.lock()
+        defer { lock.unlock() }
+        return renderedAt
+    }
+
+    func markRendered() {
+        lock.lock()
+        renderedAt = ProcessInfo.processInfo.systemUptime
+        lock.unlock()
+    }
+
+    func reset() {
+        lock.lock()
+        renderedAt = 0
+        lock.unlock()
+    }
+}
+
 private final class KeyboardSoundEngine: @unchecked Sendable {
     var volume: Float {
         get {
@@ -374,8 +400,8 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
         set {
             lock.lock()
             currentVolume = newValue
-            voices.forEach { $0.node.volume = newValue }
             lock.unlock()
+            mixer.gain = newValue
         }
     }
 
@@ -385,50 +411,85 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
         return sourceName
     }
 
-    private let lock = NSRecursiveLock()
+    private let lock = NSLock()
     private let engine = AVAudioEngine()
-    private let voiceMixer = AVAudioMixerNode()
+    private let mixer = ClickMixer(voiceCount: 16)
+    private let audioQueue = DispatchQueue(label: "local.mechanic-keyboard.audio")
     private let audioFormat = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
+    private let sourceNode: AVAudioSourceNode
+    private var configurationObserver: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
+    private var healthTimer: DispatchSourceTimer?
+    private let renderClock = RenderClock()
     private var buffersByKind: [SoundKind: [AVAudioPCMBuffer]] = [:]
-    private var voices: [PlaybackVoice] = []
     private var bufferCursor: [SoundKind: Int] = [:]
-    private var voiceCursor = 0
     private var currentVolume: Float
     private var sourceName = "Built-in"
     private var usesRandomCustomSounds = false
 
     init(volume: Float, customSoundPaths: [String]?) {
         self.currentVolume = volume
-        installPlaybackVoices()
+        let clickMixer = mixer
+        let clock = renderClock
+        sourceNode = AVAudioSourceNode(format: audioFormat) { isSilence, _, frameCount, audioBufferList in
+            let buffers = UnsafeMutableAudioBufferListPointer(audioBufferList)
+            guard let channel = buffers.first?.mData, frameCount > 0 else {
+                isSilence.pointee = true
+                return noErr
+            }
+            let destination = channel.assumingMemoryBound(to: Float.self)
+            let audible = clickMixer.render(into: destination, frameCount: Int(frameCount))
+            isSilence.pointee = ObjCBool(!audible)
+            clock.markRendered()
+            return noErr
+        }
+        mixer.gain = volume
+        engine.attach(sourceNode)
+        engine.connect(sourceNode, to: engine.mainMixerNode, format: audioFormat)
+        engine.prepare()
         if let customSoundPaths, !customSoundPaths.isEmpty {
             let urls = customSoundPaths.map { URL(fileURLWithPath: $0) }
-            do {
-                try prepareCustomPlayers(urls: urls)
-            } catch {
-                prepareBuiltInPlayers()
+            if let custom = try? loadCustomPlayers(urls: urls) {
+                publish(custom)
+            } else {
+                publish(makeBuiltInPlayers())
             }
         } else {
-            prepareBuiltInPlayers()
+            publish(makeBuiltInPlayers())
+        }
+        installRecovery()
+        audioQueue.async { [weak self] in
+            self?.startEngineIfNeeded()
+        }
+    }
+
+    deinit {
+        healthTimer?.cancel()
+        if let configurationObserver {
+            NotificationCenter.default.removeObserver(configurationObserver)
+        }
+        if let wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
         }
     }
 
     func play(for keyCode: UInt16) {
         lock.lock()
-        defer { lock.unlock() }
-
         let kind = SoundKind(keyCode: keyCode)
-        guard let buffers = buffersByKind[kind], !buffers.isEmpty, !voices.isEmpty else {
+        let buffer = buffersByKind[kind].flatMap { buffers -> AVAudioPCMBuffer? in
+            guard !buffers.isEmpty else {
+                return nil
+            }
+            return nextBuffer(from: buffers, for: kind)
+        }
+        let samples = buffer?.floatChannelData?[0]
+        let frameCount = Int(buffer?.frameLength ?? 0)
+        lock.unlock()
+
+        guard let buffer, let samples, frameCount > 0 else {
             return
         }
-        startEngineIfNeeded()
-
-        let buffer = nextBuffer(from: buffers, for: kind)
-        let voice = nextVoice()
-        if voice.node.isPlaying {
-            voice.node.stop()
-        }
-        voice.node.scheduleBuffer(buffer, at: nil, options: .interrupts, completionHandler: nil)
-        voice.node.play()
+        mixer.trigger(owner: buffer, samples: samples, frameCount: frameCount)
     }
 
     private func nextBuffer(from buffers: [AVAudioPCMBuffer], for kind: SoundKind) -> AVAudioPCMBuffer {
@@ -441,87 +502,108 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
         return buffers[index]
     }
 
-    private func nextVoice() -> PlaybackVoice {
-        let start = voiceCursor % voices.count
-        for offset in 0..<voices.count {
-            let index = (start + offset) % voices.count
-            if !voices[index].node.isPlaying {
-                voiceCursor = index + 1
-                return voices[index]
-            }
-        }
-
-        let index = start
-        voiceCursor = index + 1
-        return voices[index]
-    }
-
     func useCustomSounds(urls: [URL]) throws {
-        lock.lock()
-        defer { lock.unlock() }
-        try prepareCustomPlayers(urls: urls)
+        publish(try loadCustomPlayers(urls: urls))
     }
 
     func useBuiltInSound() {
-        lock.lock()
-        defer { lock.unlock() }
-        prepareBuiltInPlayers()
+        publish(makeBuiltInPlayers())
     }
 
-    private func prepareBuiltInPlayers() {
+    private struct PublishedSounds {
+        var buffers: [SoundKind: [AVAudioPCMBuffer]]
+        var name: String
+        var random: Bool
+    }
+
+    private func publish(_ published: PublishedSounds) {
+        lock.lock()
+        buffersByKind = published.buffers
+        bufferCursor.removeAll(keepingCapacity: true)
+        sourceName = published.name
+        usesRandomCustomSounds = published.random
+        lock.unlock()
+    }
+
+    private func makeBuiltInPlayers() -> PublishedSounds {
         if let defaultSoundURL, let defaultBuffer = try? loadSoundBuffer(url: defaultSoundURL) {
-            buffersByKind = Dictionary(uniqueKeysWithValues: SoundKind.allCases.map { kind in
-                (kind, [defaultBuffer])
-            })
-            bufferCursor.removeAll(keepingCapacity: true)
-            sourceName = defaultSoundURL.lastPathComponent
-            usesRandomCustomSounds = false
-            return
+            return PublishedSounds(
+                buffers: Dictionary(uniqueKeysWithValues: SoundKind.allCases.map { kind in
+                    (kind, [defaultBuffer])
+                }),
+                name: defaultSoundURL.lastPathComponent,
+                random: false
+            )
         }
 
-        let nextBuffers = Dictionary(uniqueKeysWithValues: SoundKind.allCases.map { kind in
-            (kind, (0..<24).compactMap { variant in
-                WaveFactory.makeClickBuffer(kind: kind, variant: variant)
-            })
-        })
-        buffersByKind = nextBuffers
-        bufferCursor.removeAll(keepingCapacity: true)
-        sourceName = "Built-in"
-        usesRandomCustomSounds = false
+        return PublishedSounds(
+            buffers: Dictionary(uniqueKeysWithValues: SoundKind.allCases.map { kind in
+                (kind, (0..<24).compactMap { variant in
+                    WaveFactory.makeClickBuffer(kind: kind, variant: variant)
+                })
+            }),
+            name: "Built-in",
+            random: false
+        )
     }
 
-    private func prepareCustomPlayers(urls: [URL]) throws {
+    private func loadCustomPlayers(urls: [URL]) throws -> PublishedSounds {
         let soundBuffers = try urls.map { url in
             (url: url, buffer: try loadSoundBuffer(url: url))
         }
-
         var nextBuffers: [SoundKind: [AVAudioPCMBuffer]] = [:]
         for kind in SoundKind.allCases {
-            var pool: [AVAudioPCMBuffer] = []
-            for item in soundBuffers {
-                pool.append(item.buffer)
-            }
-            nextBuffers[kind] = pool
+            nextBuffers[kind] = soundBuffers.map(\.buffer)
         }
-        buffersByKind = nextBuffers
-        bufferCursor.removeAll(keepingCapacity: true)
-        usesRandomCustomSounds = true
-        sourceName = soundBuffers.count == 1 ? soundBuffers[0].url.lastPathComponent : "\(soundBuffers.count) custom sounds"
+        let name = soundBuffers.count == 1 ? soundBuffers[0].url.lastPathComponent : "\(soundBuffers.count) custom sounds"
+        return PublishedSounds(buffers: nextBuffers, name: name, random: true)
     }
 
-    private func installPlaybackVoices() {
-        engine.attach(voiceMixer)
-        engine.connect(voiceMixer, to: engine.mainMixerNode, format: audioFormat)
-
-        let voiceCount = 12
-        voices = (0..<voiceCount).map { index in
-            let node = AVAudioPlayerNode()
-            node.volume = currentVolume
-            engine.attach(node)
-            engine.connect(node, to: voiceMixer, fromBus: 0, toBus: index, format: audioFormat)
-            return PlaybackVoice(node: node)
+    private func installRecovery() {
+        configurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [weak self] _ in
+            self?.restartEngineAsync()
         }
-        engine.prepare()
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.restartEngineAsync()
+        }
+
+        let timer = DispatchSource.makeTimerSource(queue: audioQueue)
+        timer.schedule(deadline: .now() + 2, repeating: 2)
+        timer.setEventHandler { [weak self] in
+            self?.keepEngineRendering()
+        }
+        timer.resume()
+        healthTimer = timer
+    }
+
+    /// Restarts on `audioQueue`, never on the event-tap thread. `stop`/`start` can block in the HAL.
+    private func restartEngineAsync() {
+        audioQueue.async { [weak self] in
+            guard let self else {
+                return
+            }
+            self.engine.stop()
+            self.startEngineIfNeeded()
+        }
+    }
+
+    /// `isRunning` can stay true after the device stalls. Render callbacks then stop, which is
+    /// the same condition that used to wedge `AVAudioPlayerNode.play()` inside `awaitIOCycle`.
+    private func keepEngineRendering() {
+        let lastRender = renderClock.uptime
+        let now = ProcessInfo.processInfo.systemUptime
+        if engine.isRunning, lastRender > 0, now - lastRender > 3 {
+            engine.stop()
+            renderClock.reset()
+        }
         startEngineIfNeeded()
     }
 
@@ -644,10 +726,6 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
 
         return nil
     }
-}
-
-private struct PlaybackVoice {
-    let node: AVAudioPlayerNode
 }
 
 private final class AudioConversionInput: @unchecked Sendable {

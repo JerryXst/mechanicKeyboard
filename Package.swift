@@ -10,13 +10,19 @@ let package = Package(
         .executable(name: "MechanicKeyboard", targets: ["MechanicKeyboard"])
     ],
     targets: [
+        .target(name: "MechanicKeyboardCore"),
         .executableTarget(
             name: "MechanicKeyboard",
+            dependencies: ["MechanicKeyboardCore"],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("ApplicationServices")
             ]
+        ),
+        .testTarget(
+            name: "MechanicKeyboardCoreTests",
+            dependencies: ["MechanicKeyboardCore"]
         )
     ]
 )

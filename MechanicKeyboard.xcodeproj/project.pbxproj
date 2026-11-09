@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		A10000000000000000000020 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000010 /* main.swift */; };
+		A10000000000000000000027 /* ClickMixer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000019 /* ClickMixer.swift */; };
 		A10000000000000000000021 /* default.wav in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* default.wav */; };
 		A10000000000000000000022 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* Assets.xcassets */; };
 		A10000000000000000000023 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000013 /* AppKit.framework */; };
@@ -19,6 +20,7 @@
 /* Begin PBXFileReference section */
 		A10000000000000000000003 /* MechanicKeyboard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MechanicKeyboard.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000010 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/MechanicKeyboard/main.swift; sourceTree = "<group>"; };
+		A10000000000000000000019 /* ClickMixer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/MechanicKeyboardCore/ClickMixer.swift; sourceTree = "<group>"; };
 		A10000000000000000000011 /* default.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = sounds/default.wav; sourceTree = "<group>"; };
 		A10000000000000000000012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = AppStore/Assets.xcassets; sourceTree = "<group>"; };
 		A10000000000000000000013 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
@@ -59,6 +61,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000010 /* main.swift */,
+				A10000000000000000000019 /* ClickMixer.swift */,
 			);
 			name = App;
 			sourceTree = "<group>";
@@ -171,6 +174,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000020 /* main.swift in Sources */,
+				A10000000000000000000027 /* ClickMixer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
