@@ -20,6 +20,9 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR/sounds"
 cp "$BUILD_DIR/$APP_NAME" "$MACOS_DIR/$APP_NAME"
 strip -x "$MACOS_DIR/$APP_NAME"
 cp "$ROOT_DIR/sounds/default.wav" "$RESOURCES_DIR/sounds/default.wav"
+for lproj in "$ROOT_DIR/AppStore"/*.lproj; do
+    [[ -d "$lproj" ]] && cp -R "$lproj" "$RESOURCES_DIR/"
+done
 
 ICONSET_TMP="$(mktemp -d /tmp/mechanic-keyboard-icon.XXXXXX)/AppIcon.iconset"
 mkdir -p "$ICONSET_TMP"
@@ -34,6 +37,12 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
 <dict>
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>en</string>
+        <string>zh-Hans</string>
+        <string>zh-Hant</string>
+    </array>
     <key>CFBundleExecutable</key>
     <string>$APP_NAME</string>
     <key>CFBundleIconFile</key>

@@ -42,6 +42,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastMonitorIsActive = false
     private var enabled = UserDefaults.standard.object(forKey: Defaults.enabled) as? Bool ?? true
     private var volume = UserDefaults.standard.object(forKey: Defaults.volume) as? Double ?? 0.55
+    private var appLanguage = AppLanguage.load()
+
+    private var l10n: L10n {
+        L10n(language: appLanguage.resolved())
+    }
 
     var currentEventTap: CFMachPort? {
         eventTap
@@ -79,9 +84,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func rebuildMenu() {
+        let strings = l10n
         let menu = NSMenu()
 
-        let toggleTitle = enabled ? "Disable Sound" : "Enable Sound"
+        let toggleTitle = strings.toggleSound(enabled: enabled)
         let toggleItem = NSMenuItem(title: toggleTitle, action: #selector(toggleEnabled), keyEquivalent: "")
         toggleItem.target = self
         menu.addItem(toggleItem)
@@ -94,40 +100,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitorItem.target = self
         menu.addItem(monitorItem)
 
-        let countItem = NSMenuItem(title: "Key Events: \(inputHandler.keyEventCount)", action: nil, keyEquivalent: "")
+        let countItem = NSMenuItem(title: strings.keyEvents(inputHandler.keyEventCount), action: nil, keyEquivalent: "")
         countItem.isEnabled = false
         menu.addItem(countItem)
 
         menu.addItem(.separator())
 
         let volumeItem = NSMenuItem()
-        volumeItem.view = VolumeControlView(value: volume) { [weak self] newValue in
+        volumeItem.view = VolumeControlView(title: strings.volumeLabel, value: volume) { [weak self] newValue in
             self?.setVolume(newValue)
         }
         menu.addItem(volumeItem)
 
         menu.addItem(.separator())
 
-        let soundTitle = "Sound: \(keyboardSound.soundName)"
+        let soundTitle = strings.soundTitle(for: keyboardSound.soundSource)
         let soundItem = NSMenuItem(title: soundTitle, action: nil, keyEquivalent: "")
         soundItem.isEnabled = false
         menu.addItem(soundItem)
 
-        let chooseSoundItem = NSMenuItem(title: "Choose Sound Files...", action: #selector(chooseSoundFiles), keyEquivalent: "")
+        let chooseSoundItem = NSMenuItem(title: strings.chooseSoundFiles, action: #selector(chooseSoundFiles), keyEquivalent: "")
         chooseSoundItem.target = self
         menu.addItem(chooseSoundItem)
 
-        let resetSoundItem = NSMenuItem(title: "Use Built-in Sound", action: #selector(useBuiltInSound), keyEquivalent: "")
+        let resetSoundItem = NSMenuItem(title: strings.useBuiltInSound, action: #selector(useBuiltInSound), keyEquivalent: "")
         resetSoundItem.target = self
         menu.addItem(resetSoundItem)
 
         menu.addItem(.separator())
 
-        let testItem = NSMenuItem(title: "Test Click", action: #selector(playTestClick), keyEquivalent: "")
+        let languageItem = NSMenuItem(title: strings.languageMenuTitle, action: nil, keyEquivalent: "")
+        let languageSubmenu = NSMenu(title: strings.languageMenuTitle)
+        for option in AppLanguage.manualCases {
+            let item = NSMenuItem(title: strings.languageOptionTitle(option), action: #selector(selectLanguage(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = option.rawValue
+            item.state = (option.resolved() == strings.language) ? .on : .off
+            languageSubmenu.addItem(item)
+        }
+        languageSubmenu.addItem(.separator())
+        let followSystemItem = NSMenuItem(title: strings.languageOptionTitle(.system), action: #selector(selectLanguage(_:)), keyEquivalent: "")
+        followSystemItem.target = self
+        followSystemItem.representedObject = AppLanguage.system.rawValue
+        followSystemItem.state = (appLanguage == .system) ? .on : .off
+        languageSubmenu.addItem(followSystemItem)
+        languageItem.submenu = languageSubmenu
+        menu.addItem(languageItem)
+
+        menu.addItem(.separator())
+
+        let testItem = NSMenuItem(title: strings.testClick, action: #selector(playTestClick), keyEquivalent: "")
         testItem.target = self
         menu.addItem(testItem)
 
-        let quitItem = NSMenuItem(title: "Quit Mechanic Keyboard", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: strings.quitApp, action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -175,11 +201,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func permissionTitle() -> String {
-        hasRequiredPermissions() ? "Input Monitoring: Granted" : "Grant Input Monitoring..."
+        l10n.permissionStatus(granted: hasRequiredPermissions())
     }
 
     private func monitorTitle() -> String {
-        monitorIsActive ? "Keyboard Monitor: Active" : "Keyboard Monitor: Waiting"
+        l10n.monitorStatus(active: monitorIsActive)
     }
 
     private var monitorIsActive: Bool {
@@ -260,6 +286,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rebuildMenu()
     }
 
+    @objc private func selectLanguage(_ sender: NSMenuItem) {
+        guard
+            let rawValue = sender.representedObject as? String,
+            let selected = AppLanguage(rawValue: rawValue)
+        else {
+            return
+        }
+        appLanguage = selected
+        selected.save()
+        rebuildMenu()
+    }
+
     @objc private func quit() {
         NSApp.terminate(nil)
     }
@@ -272,7 +310,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showSoundLoadError(_ error: Error) {
         let alert = NSAlert()
-        alert.messageText = "Could not load sound file"
+        alert.messageText = l10n.soundLoadErrorTitle
         alert.informativeText = error.localizedDescription
         alert.alertStyle = .warning
         alert.runModal()
@@ -335,9 +373,9 @@ private final class VolumeControlView: NSView {
     private let label: NSTextField
     private let onChange: (Double) -> Void
 
-    init(value: Double, onChange: @escaping (Double) -> Void) {
+    init(title: String, value: Double, onChange: @escaping (Double) -> Void) {
         self.slider = NSSlider(value: value, minValue: 0, maxValue: 1, target: nil, action: nil)
-        self.label = NSTextField(labelWithString: "Volume")
+        self.label = NSTextField(labelWithString: title)
         self.onChange = onChange
         super.init(frame: NSRect(x: 0, y: 0, width: 230, height: 42))
 
@@ -397,10 +435,10 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
         }
     }
 
-    var soundName: String {
+    var soundSource: SoundSourceDescriptor {
         lock.lock()
         defer { lock.unlock() }
-        return sourceName
+        return sourceDescriptor
     }
 
     /// 128 frames is ~2.7 ms at 48 kHz. The 512-frame default made each click wait up to ~22 ms.
@@ -419,7 +457,7 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
     private var buffersByKind: [SoundKind: [AVAudioPCMBuffer]] = [:]
     private var bufferCursor: [SoundKind: Int] = [:]
     private var currentVolume: Float
-    private var sourceName = "Built-in"
+    private var sourceDescriptor: SoundSourceDescriptor = .builtIn
     private var usesRandomCustomSounds = false
 
     init(volume: Float, customSoundPaths: [String]?) {
@@ -511,7 +549,7 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
 
     private struct PublishedSounds {
         var buffers: [SoundKind: [AVAudioPCMBuffer]]
-        var name: String
+        var source: SoundSourceDescriptor
         var random: Bool
     }
 
@@ -519,7 +557,7 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
         lock.lock()
         buffersByKind = published.buffers
         bufferCursor.removeAll(keepingCapacity: true)
-        sourceName = published.name
+        sourceDescriptor = published.source
         usesRandomCustomSounds = published.random
         lock.unlock()
     }
@@ -530,7 +568,7 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
                 buffers: Dictionary(uniqueKeysWithValues: SoundKind.allCases.map { kind in
                     (kind, [defaultBuffer])
                 }),
-                name: defaultSoundURL.lastPathComponent,
+                source: .file(defaultSoundURL.lastPathComponent),
                 random: false
             )
         }
@@ -541,7 +579,7 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
                     WaveFactory.makeClickBuffer(kind: kind, variant: variant, sampleRate: Int(audioFormat.sampleRate))
                 })
             }),
-            name: "Built-in",
+            source: .builtIn,
             random: false
         )
     }
@@ -554,8 +592,10 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
         for kind in SoundKind.allCases {
             nextBuffers[kind] = soundBuffers.map(\.buffer)
         }
-        let name = soundBuffers.count == 1 ? soundBuffers[0].url.lastPathComponent : "\(soundBuffers.count) custom sounds"
-        return PublishedSounds(buffers: nextBuffers, name: name, random: true)
+        let source: SoundSourceDescriptor = soundBuffers.count == 1
+            ? .file(soundBuffers[0].url.lastPathComponent)
+            : .multipleCustom(soundBuffers.count)
+        return PublishedSounds(buffers: nextBuffers, source: source, random: true)
     }
 
     private func installRecovery() {
