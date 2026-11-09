@@ -5,3 +5,5 @@ DerivedData/
 .vscode/
 MechanicKeyboard.app/
 MechanicKeyboard.zip
+*.dmg
+.swiftpm/

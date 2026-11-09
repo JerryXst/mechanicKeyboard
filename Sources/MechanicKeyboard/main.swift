@@ -57,7 +57,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installKeyboardEventTap()
         startMonitorRetryTimer()
         refreshPermissionStatus()
-        debugLog("Launched. inputMonitoring=\(hasRequiredPermissions()) monitorActive=\(monitorIsActive)")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -141,7 +140,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        debugLog("Installing keyboard event tap. inputMonitoring=\(hasRequiredPermissions())")
         let eventMask = CGEventMask(1 << CGEventType.keyDown.rawValue)
 
         eventTap = CGEvent.tapCreate(
@@ -154,7 +152,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         guard let eventTap else {
-            debugLog("Failed to create keyboard event tap. Grant Input Monitoring permission, then restart or wait for retry.")
             return
         }
 
@@ -165,7 +162,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         CGEvent.tapEnable(tap: eventTap, enable: true)
         lastMonitorIsActive = monitorIsActive
-        debugLog("Keyboard event tap installed. monitorActive=\(monitorIsActive)")
         rebuildMenu()
     }
 
@@ -217,10 +213,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
-    }
-
-    private func debugLog(_ message: String) {
-        NSLog("[MechanicKeyboard] %@", message)
     }
 
     @objc private func toggleEnabled() {
@@ -411,11 +403,14 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
         return sourceName
     }
 
+    /// 128 frames is ~2.7 ms at 48 kHz. The 512-frame default made each click wait up to ~22 ms.
+    private static let ioBufferFrames: UInt32 = 128
+
     private let lock = NSLock()
-    private let engine = AVAudioEngine()
+    private let engine: AVAudioEngine
     private let mixer = ClickMixer(voiceCount: 16)
     private let audioQueue = DispatchQueue(label: "local.mechanic-keyboard.audio")
-    private let audioFormat = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
+    private let audioFormat: AVAudioFormat
     private let sourceNode: AVAudioSourceNode
     private var configurationObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
@@ -429,6 +424,10 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
 
     init(volume: Float, customSoundPaths: [String]?) {
         self.currentVolume = volume
+        let engine = AVAudioEngine()
+        self.engine = engine
+        let hardwareRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
+        audioFormat = AVAudioFormat(standardFormatWithSampleRate: hardwareRate > 0 ? hardwareRate : 48_000, channels: 1)!
         let clickMixer = mixer
         let clock = renderClock
         sourceNode = AVAudioSourceNode(format: audioFormat) { isSilence, _, frameCount, audioBufferList in
@@ -539,7 +538,7 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
         return PublishedSounds(
             buffers: Dictionary(uniqueKeysWithValues: SoundKind.allCases.map { kind in
                 (kind, (0..<24).compactMap { variant in
-                    WaveFactory.makeClickBuffer(kind: kind, variant: variant)
+                    WaveFactory.makeClickBuffer(kind: kind, variant: variant, sampleRate: Int(audioFormat.sampleRate))
                 })
             }),
             name: "Built-in",
@@ -611,11 +610,28 @@ private final class KeyboardSoundEngine: @unchecked Sendable {
         guard !engine.isRunning else {
             return
         }
+        requestLowLatencyBuffer()
         do {
             try engine.start()
         } catch {
-            NSLog("[MechanicKeyboard] Could not start audio engine: %@", error.localizedDescription)
+            // Audio device may be unavailable; keepEngineRendering will retry.
         }
+    }
+
+    /// Re-applied on every start because a device or configuration change resets the IO size.
+    private func requestLowLatencyBuffer() {
+        guard let unit = engine.outputNode.audioUnit else {
+            return
+        }
+        var frames = Self.ioBufferFrames
+        AudioUnitSetProperty(
+            unit,
+            kAudioDevicePropertyBufferFrameSize,
+            kAudioUnitScope_Global,
+            0,
+            &frames,
+            UInt32(MemoryLayout<UInt32>.size)
+        )
     }
 
     private func loadSoundBuffer(url: URL) throws -> AVAudioPCMBuffer {
@@ -761,8 +777,7 @@ private enum SoundKind: CaseIterable, Hashable {
 }
 
 private enum WaveFactory {
-    static func makeClickBuffer(kind: SoundKind, variant: Int) -> AVAudioPCMBuffer? {
-        let sampleRate = 44_100
+    static func makeClickBuffer(kind: SoundKind, variant: Int, sampleRate: Int) -> AVAudioPCMBuffer? {
         let duration: Double
         let baseFrequency: Double
         let brightness: Double

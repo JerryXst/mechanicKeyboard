@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Mechanic Keyboard 使用说明</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;line-height:1.65;max-width:820px;margin:40px auto;padding:0 20px;color:#1d1d1f;background:#fafafa}
+h1,h2,h3{line-height:1.3}
+h1{font-size:2rem;margin-bottom:.4em}
+h2{margin-top:2em;border-bottom:1px solid #e5e5ea;padding-bottom:.3em}
+table{border-collapse:collapse;width:100%;margin:1em 0;background:#fff}
+th,td{border:1px solid #d2d2d7;padding:10px 12px;text-align:left}
+th{background:#f5f5f7}
+figure{margin:1.4em 0;background:#fff;border:1px solid #e5e5ea;border-radius:12px;overflow:hidden}
+img{display:block;width:100%;height:auto}
+figcaption{padding:10px 14px;color:#6e6e73;font-size:.92rem;background:#f5f5f7}
+blockquote{margin:1em 0;padding:12px 16px;background:#fff7e6;border-left:4px solid #ff9f0a;border-radius:8px}
+code{background:#f2f2f7;padding:1px 6px;border-radius:4px;font-size:.95em}
+ol,ul{padding-left:1.3em}
+hr{border:none;border-top:1px solid #e5e5ea;margin:2em 0}
+</style>
+</head>
+<body>
+<h1>Mechanic Keyboard 使用说明</h1><p>Mechanic Keyboard 是一款 macOS 菜单栏小工具：你打字时，它会播放机械键盘风格的按键音。</p><p>它<strong>只监听按键事件来播放本地音效</strong>，不会记录、保存或上传你敲了什么字。</p><hr/><h2>需要什么权限？</h2><table><tr><th>权限</th><th>中文名称</th><th>是否必须</th><th>用途</th></tr><tr><td>Input Monitoring</td><td><strong>输入监控</strong></td><td>必须</td><td>在后台听到全局按键，才能播放按键音</td></tr></table><blockquote>说明：系统设置里这项叫「输入监控」，不是「辅助功能 / Accessibility」。  </blockquote><blockquote>若菜单里显示「输入监控：未授权」或图标发橙，按下面步骤打开即可。</blockquote><hr/><h2>1. 安装</h2><ol><li>打开朋友发来的 <code>MechanicKeyboard-*.dmg</code></li><li>把 <strong>Mechanic Keyboard</strong> 拖到右边的 <strong>Applications（应用程序）</strong></li></ol><figure><img src="images/guide-01-install-dmg.jpg" alt="把 App 拖到应用程序"/><figcaption>把 App 拖到应用程序</figcaption></figure><ol><li>到「应用程序」里找到 <strong>Mechanic Keyboard</strong>，双击打开</li></ol><hr/><h2>2. 第一次打不开？（Gatekeeper）</h2><p>未公证的测试包，双击可能提示「无法验证开发者」。按下面做一次即可：</p><ol><li>在 <strong>应用程序</strong> 里选中 <code>Mechanic Keyboard</code></li><li><strong>右键（或双指点按）→ 打开</strong></li><li>在弹窗里再点一次 <strong>打开</strong></li></ol><figure><img src="images/guide-02-gatekeeper-open.jpg" alt="右键打开以绕过首次拦截"/><figcaption>右键打开以绕过首次拦截</figcaption></figure><p>之后正常双击就能启动。</p><hr/><h2>3. 授予「输入监控」权限（最重要）</h2><p>没有这项权限，App 听不到按键，也就不会出声。</p><h3>方法 A：从 App 菜单跳转（推荐）</h3><ol><li>看屏幕右上角菜单栏，找到键盘图标 ⌨︎  </li><li>点一下，选择 <strong>Grant Input Monitoring...</strong>  </li><li>系统会打开「隐私与安全性」相关页面  </li><li>按下面「方法 B」把开关打开</li></ol><h3>方法 B：手动打开系统设置</h3><ol><li>打开 <strong>系统设置（System Settings）</strong></li><li>进入 <strong>隐私与安全性（Privacy &amp; Security）</strong></li><li>在列表里找到并点开 <strong>输入监控（Input Monitoring）</strong></li></ol><figure><img src="images/guide-03-privacy-input-monitoring.jpg" alt="系统设置 → 隐私与安全性 → 输入监控"/><figcaption>系统设置 → 隐私与安全性 → 输入监控</figcaption></figure><ol><li>在列表中找到 <strong>Mechanic Keyboard</strong></li><li>把右侧开关打开（如有锁图标，先点锁并输入密码）</li><li>若列表里没有它：先启动一次 App，或点列表下方 <strong>＋</strong> 从「应用程序」里添加</li></ol><figure><img src="images/guide-04-enable-mechanic-keyboard.jpg" alt="打开 Mechanic Keyboard 的输入监控开关"/><figcaption>打开 Mechanic Keyboard 的输入监控开关</figcaption></figure><ol><li>打开权限后，<strong>退出并重新打开</strong> Mechanic Keyboard（菜单 → Quit）</li></ol><hr/><h2>4. 确认已经生效</h2><p>点菜单栏 ⌨︎ 图标，理想状态类似：</p><ul><li><strong>Input Monitoring: Granted</strong>（输入监控：已授权）</li><li><strong>Keyboard Monitor: Active</strong>（键盘监听：工作中）</li><li>图标不再显示橙色警告色</li></ul><figure><img src="images/guide-05-menubar-ready.jpg" alt="菜单栏状态正常"/><figcaption>菜单栏状态正常</figcaption></figure><p>然后：</p><ol><li>点菜单里的 <strong>Test Click</strong>，应能听到一声点击  </li><li>在任意 App 里正常打字，每次按下（非长按连发）都会有按键音  </li><li>可用菜单里的 <strong>Volume</strong> 滑杆调节大小；不需要时选 <strong>Disable Sound</strong></li></ol><hr/><h2>5. 常用功能</h2><table><tr><th>菜单项</th><th>作用</th></tr><tr><td>Enable Sound / Disable Sound</td><td>开/关按键音</td></tr><tr><td>Volume</td><td>调节音量</td></tr><tr><td>Choose Sound Files...</td><td>选择自定义音频（可多选，随机播放）</td></tr><tr><td>Use Built-in Sound</td><td>恢复内置音效</td></tr><tr><td>Test Click</td><td>试听一声</td></tr><tr><td>Quit Mechanic Keyboard</td><td>退出</td></tr></table><hr/><h2>6. 常见问题</h2><h3>完全没有声音？</h3><ol><li>确认菜单不是 <strong>Disable Sound</strong></li><li>确认音量滑杆不是 0，系统输出设备没静音  </li><li>确认 <strong>输入监控</strong> 已打开，且菜单显示 <strong>Keyboard Monitor: Active</strong>  </li><li>关掉 App 再开一次；仍不行就在「输入监控」里关掉再打开该开关  </li></ol><h3>图标是橙色？</h3><p>表示键盘监听未就绪（多半是权限未给，或刚给权限后还没恢复）。按第 3 步检查「输入监控」，然后重启 App。</p><h3>换电脑 / 重装后要重新授权吗？</h3><p>要。换机器、删掉重装，或从「应用程序」换到别的路径再运行，系统常会要求重新打开「输入监控」。</p><h3>支持 Intel Mac 吗？</h3><p>当前测试包为 <strong>Apple Silicon（arm64）</strong>。Intel Mac 需要单独的 Intel/通用架构包。</p><h3>会不会上传我的键盘内容？</h3><p>不会。权限只用于本地播放音效；不记录、不存储、不上传按键内容。</p><hr/><h2>7. 快速检查清单</h2><ul><li>[ ] 已拖到「应用程序」</li><li>[ ] 首次如被拦截，已用「右键 → 打开」</li><li>[ ] 「输入监控」里 Mechanic Keyboard 已打开</li><li>[ ] 菜单显示监听 Active，Test Click 有声音</li><li>[ ] 打字时有按键音</li></ul><p>有问题把菜单里这几项的状态（输入监控 / 键盘监听）截图发给对方即可排查。</p>
+</body>
+</html>
