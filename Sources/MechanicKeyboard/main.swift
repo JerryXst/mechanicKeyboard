@@ -43,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var enabled = UserDefaults.standard.object(forKey: Defaults.enabled) as? Bool ?? true
     private var volume = UserDefaults.standard.object(forKey: Defaults.volume) as? Double ?? 0.55
     private var appLanguage = AppLanguage.load()
+    private let launchAtLogin = LaunchAtLoginManager()
 
     private var l10n: L10n {
         L10n(language: appLanguage.resolved())
@@ -146,6 +147,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         languageSubmenu.addItem(followSystemItem)
         languageItem.submenu = languageSubmenu
         menu.addItem(languageItem)
+
+        let launchAtLoginItem = NSMenuItem(title: strings.launchAtLogin, action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        launchAtLoginItem.target = self
+        launchAtLoginItem.state = launchAtLogin.isEnabled ? .on : .off
+        menu.addItem(launchAtLoginItem)
 
         menu.addItem(.separator())
 
@@ -298,6 +304,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rebuildMenu()
     }
 
+    @objc private func toggleLaunchAtLogin() {
+        do {
+            try launchAtLogin.setEnabled(!launchAtLogin.isEnabled)
+            rebuildMenu()
+        } catch {
+            showLaunchAtLoginError(error)
+        }
+    }
+
     @objc private func quit() {
         NSApp.terminate(nil)
     }
@@ -311,6 +326,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showSoundLoadError(_ error: Error) {
         let alert = NSAlert()
         alert.messageText = l10n.soundLoadErrorTitle
+        alert.informativeText = error.localizedDescription
+        alert.alertStyle = .warning
+        alert.runModal()
+    }
+
+    private func showLaunchAtLoginError(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = l10n.launchAtLoginErrorTitle
         alert.informativeText = error.localizedDescription
         alert.alertStyle = .warning
         alert.runModal()

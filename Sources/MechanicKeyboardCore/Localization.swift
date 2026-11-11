@@ -228,6 +228,28 @@ public struct L10n: Sendable {
         }
     }
 
+    public var launchAtLogin: String {
+        switch language {
+        case .en:
+            return "Launch at Login"
+        case .zhHans:
+            return "开机自动启动"
+        case .zhHant:
+            return "開機自動啟動"
+        }
+    }
+
+    public var launchAtLoginErrorTitle: String {
+        switch language {
+        case .en:
+            return "Could not update Launch at Login"
+        case .zhHans:
+            return "无法更新开机自动启动"
+        case .zhHant:
+            return "無法更新開機自動啟動"
+        }
+    }
+
     public func languageOptionTitle(_ option: AppLanguage) -> String {
         switch option {
         case .system:
